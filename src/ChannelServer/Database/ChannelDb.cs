@@ -40,6 +40,8 @@ namespace Melia.Channel.Database
 			}
 
 			this.SaveVariables("account:" + account.Id, account.Variables.Perm);
+			this.SaveMapVisibility(account);
+			this.SaveChatMacros(account);
 
 			return true;
 		}
@@ -73,6 +75,8 @@ namespace Melia.Channel.Database
 			}
 
 			this.LoadVars("account:" + account.Id, account.Variables.Perm);
+			this.LoadMapVisibility(account);
+			this.LoadChatMacros(account);
 
 			return account;
 		}
@@ -399,6 +403,107 @@ namespace Melia.Channel.Database
 							Log.Warning("LoadVars: Value '{2}' of variable '{0}' doesn't fit into type '{1}'. Owner: '{3}'", name, type, val, owner);
 							continue;
 						}
+					}
+				}
+			}
+		}
+
+		/// Updates explored maps for an account.
+		/// </summary>
+		/// <param name="account"></param>
+		public void SaveMapVisibility(Account account)
+		{
+			using (var conn = this.GetConnection())
+			using (var trans = conn.BeginTransaction())
+			{
+				foreach (var pair in account.MapVisibility)
+				{
+					using (var mc = new MySqlCommand("DELETE FROM `MapVisibility` WHERE `accountId` = @accountId AND `map` = @map", conn, trans))
+					{
+						mc.Parameters.AddWithValue("@accountId", account.Id);
+						mc.Parameters.AddWithValue("@map", pair.Key);
+						mc.ExecuteNonQuery();
+					}
+
+					using (var cmd = new InsertCommand("INSERT INTO `MapVisibility` {0}", conn))
+					{
+						cmd.Set("accountId", account.Id);
+						cmd.Set("map", pair.Key);
+						cmd.Set("explored", pair.Value);
+						cmd.Execute();
+					}
+				}
+				trans.Commit();
+			}
+		}
+
+		/// <summary>
+		/// Returns a dictionary of explored maps for an account.
+		/// </summary>
+		/// <param name="account"></param>
+		public void LoadMapVisibility(Account account)
+		{
+			account.MapVisibility = new Dictionary<int, byte[]>();
+
+			using (var conn = this.GetConnection())
+			using (var mc = new MySqlCommand("SELECT * FROM `MapVisibility` WHERE `accountId` = @accountId", conn))
+			{
+				mc.Parameters.AddWithValue("accountId", account.Id);
+
+				using (var reader = mc.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						var map = reader.GetInt32("map");
+						var explored = reader["explored"] as byte[];
+						account.MapVisibility[map] = explored;
+					}
+				}
+			}
+		}
+
+		/// <summary>
+		/// Persists chat macros to the database.
+		/// </summary>
+		/// <param name="account"></param>
+		public void SaveChatMacros(Account account)
+		{
+			using (var conn = this.GetConnection())
+			{
+				foreach (var macro in account.GetChatMacros())
+				{
+					using (var cmd = new InsertCommand("INSERT INTO `ChatMacro` {0} ON DUPLICATE KEY UPDATE `message` = @message, `pose` = @pose", conn))
+					{
+						cmd.Set("accountId", account.Id);
+						cmd.Set("slot", macro.Slot);
+						cmd.Set("message", macro.Message);
+						cmd.Set("pose", macro.Pose);
+
+						cmd.Execute();
+					}
+				}
+			}
+		}
+
+		/// <summary>
+		/// Loads chat macros for an account.
+		/// </summary>
+		/// <param name="account"></param>
+		public void LoadChatMacros(Account account)
+		{
+			using (var conn = this.GetConnection())
+			using (var mc = new MySqlCommand("SELECT * FROM `ChatMacro` WHERE `accountId` = @accountId", conn))
+			{
+				mc.Parameters.AddWithValue("accountId", account.Id); 
+				
+				using (var reader = mc.ExecuteReader())
+				{
+					while (reader.Read())
+					{
+						var slot = reader.GetInt32("slot");
+						var message = reader.GetString("message");
+						var pose = reader.GetInt32("pose");
+						account.AddChatMacro(new ChatMacro(slot, message, pose));
 					}
 				}
 			}

@@ -355,10 +355,17 @@ namespace Melia.Channel.Network
 		/// <param name="character"></param>
 		public static void ZC_CHAT_MACRO_LIST(Character character)
 		{
+			var macros = character.Connection.Account.GetChatMacros();
+
 			var packet = new Packet(Op.ZC_CHAT_MACRO_LIST);
-
-			packet.PutInt(0); // ?
-
+			packet.PutInt(macros.Count);
+			foreach (var macro in macros)
+			{
+				packet.PutInt(macro.Slot);
+				packet.PutString(macro.Message, 128);
+				packet.PutInt(macro.Pose);
+			}
+			
 			character.Connection.Send(packet);
 		}
 
@@ -1285,6 +1292,24 @@ namespace Melia.Channel.Network
 		}
 
 		/// <summary>
+		/// Sends the visible areas of a map to a character.
+		/// </summary>
+		/// <param name="conn"></param>
+		public static void ZC_MAP_REVEAL_LIST(ChannelConnection conn)
+		{
+			var packet = new Packet(Op.ZC_MAP_REVEAL_LIST);
+
+			packet.PutInt(conn.Account.MapVisibility.Count());
+			foreach (var pair in conn.Account.MapVisibility)
+			{
+				packet.PutInt(pair.Key);
+				packet.PutBin(pair.Value);
+			}
+
+			conn.Send(packet);
+		}
+
+		/// <summary>
 		/// Adds exp.
 		/// </summary>
 		/// <param name="character"></param>
@@ -1338,16 +1363,19 @@ namespace Melia.Channel.Network
 		}
 
 		/// <summary>
-		/// Sends ZC_PC_PROP_UPDATE to character, updating a property.
+		/// Updates a property on a character.
 		/// </summary>
 		/// <param name="character"></param>
 		/// <param name="property"></param>
-		/// <param name="value"></param>
-		public static void ZC_PC_PROP_UPDATE(Character character, short property, byte value)
+		/// <param name="type">0: PC, 1: PCEtc</param>
+		public static void ZC_PC_PROP_UPDATE(Character character, int property, byte type)
 		{
+			if (type > 1)
+				throw new ArgumentOutOfRangeException("Error. Invalid property type specified.");
+
 			var packet = new Packet(Op.ZC_PC_PROP_UPDATE);
-			packet.PutShort(property);
-			packet.PutByte(value); // ?
+			packet.PutInt(property);
+			packet.PutByte(type);
 
 			character.Connection.Send(packet);
 		}
@@ -1393,7 +1421,7 @@ namespace Melia.Channel.Network
 
 			character.Hp += (isDamage ? -amount : amount);
 			packet.PutInt(character.Hp);
-			
+
 			packet.PutInt(character.HPChangeCounter);
 
 			character.Connection.Send(packet);
@@ -1704,9 +1732,20 @@ namespace Melia.Channel.Network
 		/// <param name="conn"></param>
 		public static void ZC_NORMAL_SetSessionKey(ChannelConnection conn)
 		{
-			var packet = new Packet(Op.BC_NORMAL);
+			var packet = new Packet(Op.ZC_NORMAL);
 			packet.PutInt(0x14E);
 			packet.PutLpString(conn.SessionKey);
+			conn.Send(packet);
+		}
+
+		/// <summary>
+		/// Notifies the client that the world map needs updating.
+		/// </summary>
+		/// <param name="conn"></param>
+		public static void ZC_NORMAL_WorldMapNeedsUpdate(ChannelConnection conn)
+		{
+			var packet = new Packet(Op.ZC_NORMAL);
+			packet.PutInt(0x17B); // subOp
 			conn.Send(packet);
 		}
 
@@ -1804,6 +1843,17 @@ namespace Melia.Channel.Network
 		}
 
 		/// <summary>
+		/// Instructs the client to run various scripts such as quest updating.
+		/// </summary>
+		/// <param name="character"></param>
+		public static void ZC_SHARED_MSG(Character character, SharedMsgType msg)
+		{
+			var packet = new Packet(Op.ZC_SHARED_MSG);
+			packet.PutInt((int)msg);
+			character.Connection.Send(packet);
+		}
+
+		/// <summary>
 		/// Increases player experience by killing monsters
 		/// </summary>
 		/// <param name="character"></param>
@@ -1873,6 +1923,18 @@ namespace Melia.Channel.Network
 			var packet = new Packet(Op.ZC_SAVE_INFO);
 			conn.Send(packet);
 		}
+
+		/// <summary>
+		/// Changes the client speed.
+		/// </summary>
+		/// <param name="conn"></param>
+		public static void ZC_TIME_FACTOR(ChannelConnection conn)
+		{
+			var packet = new Packet(Op.ZC_TIME_FACTOR);
+			packet.PutFloat(1);
+			conn.Send(packet);
+		}
+
 
 		public static void DUMMY(ChannelConnection conn)
 		{

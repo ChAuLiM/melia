@@ -116,6 +116,7 @@ namespace Melia.Channel.Network
 			Send.ZC_ITEM_EQUIP_LIST(character);
 			Send.ZC_SKILL_LIST(character);
 			Send.ZC_ABILITY_LIST(character);
+			Send.ZC_MAP_REVEAL_LIST(conn);
 			Send.ZC_NORMAL_JobSkillPointUpdate(character);
 			Send.ZC_COOLDOWN_LIST(character);
 			Send.ZC_QUICK_SLOT_LIST(conn);
@@ -129,7 +130,13 @@ namespace Melia.Channel.Network
 			// ZC_SKILL_ADD...
 			Send.ZC_JOB_PTS(character);
 			Send.ZC_MOVE_SPEED(character);
+			Send.ZC_NORMAL_WorldMapNeedsUpdate(conn);
 
+			// For first time playing
+			Send.ZC_PC_PROP_UPDATE(character, ObjectProperty.PCEtc.FirstPlay, 1);
+			Send.ZC_ADDON_MSG(character, ZCAddonMsg.KEYBOARD_TUTORIAL);
+
+			Send.ZC_SHARED_MSG(character, SharedMsgType.QuestUpdate);
 			character.OpenEyes();
 		}
 
@@ -762,6 +769,20 @@ namespace Melia.Channel.Network
 		}
 
 		/// <summary>
+		/// Contains newly uncovered areas of a map.
+		/// </summary>
+		/// <param name="conn"></param>
+		/// <param name="packet"></param>
+		[PacketHandler(Op.CZ_MAP_REVEAL_INFO)]
+		public void CZ_MAP_REVEAL_INFO(ChannelConnection conn, Packet packet)
+		{
+			var mapId = packet.GetInt();
+			var explored = packet.GetBin(128);
+
+			conn.Account.MapVisibility[mapId] = explored;
+		}
+
+		/// <summary>
 		/// Sent when attacking enemies.
 		/// </summary>
 		/// <param name="conn"></param>
@@ -1139,7 +1160,7 @@ namespace Melia.Channel.Network
 				default:
 					return;
 			}
-			
+
 			Log.Info("User {0} is transferring to {1} state.", conn.Account.Name, destination);
 		}
 
@@ -1152,6 +1173,39 @@ namespace Melia.Channel.Network
 		public void CZ_SAVE_INFO(ChannelConnection conn, Packet packet)
 		{
 			// Save something if needed?
+		}
+
+		/// <summary>
+		/// Request to save a chat macro.
+		/// </summary>
+		/// <param name="conn"></param>
+		/// <param name="packet"></param>
+		[PacketHandler(Op.CZ_CHAT_MACRO)]
+		public void CZ_CHAT_MACRO(ChannelConnection conn, Packet packet)
+		{
+			var slot = packet.GetInt();
+			var message = packet.GetString(128);
+			var pose = packet.GetInt();
+
+			if ((slot > 10) || (slot < 0))
+				return;
+
+			if (String.IsNullOrEmpty(message) && pose == 0)
+				return;
+
+			var macro = new Database.ChatMacro(slot, message, pose);
+			conn.Account.AddChatMacro(macro);
+		}
+
+		/// <summary>
+		/// Sent when requesting to visit another player's barrack
+		/// </summary>
+		/// <param name="conn"></param>
+		/// <param name="packet"></param>
+		[PacketHandler(Op.CZ_VISIT_BARRACK)]
+		public void CZ_VISIT_BARRACK(ChannelConnection conn, Packet packet)
+		{
+			var teamName = packet.GetString(64);
 		}
 	}
 
